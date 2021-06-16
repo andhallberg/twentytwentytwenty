@@ -38,9 +38,8 @@ namespace TwentyTwentyTwenty
                 Visible = true
             };
 
-            var soundPlayer = File.Exists(SoundPath)
-                ? new SoundPlayer(SoundPath)
-                : null;
+            SoundPlayer soundPlayer = InitAudioPlayer();
+
             var uiThreadSyncContext = SynchronizationContext.Current;
 
             Task.Run(() =>
@@ -55,6 +54,30 @@ namespace TwentyTwentyTwenty
                 }
                 // ReSharper disable once FunctionNeverReturns
             });
+        }
+
+        SoundPlayer InitAudioPlayer()
+        {
+            var soundPlayer = new SoundPlayer(SoundPath);
+            try
+            {
+                soundPlayer.Load();
+            }
+            catch (FileNotFoundException)
+            {
+                HandleError($"audio file not found");
+            }
+            catch (TimeoutException)
+            {
+                HandleError($"timeout reading audio file");
+            }
+            return soundPlayer;
+
+            void HandleError(string error)
+            {
+                soundPlayer = null;
+                trayIcon.Text += $"\n{error}";
+            }
         }
 
         private void Exit(object sender, EventArgs e)
