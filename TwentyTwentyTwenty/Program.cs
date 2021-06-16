@@ -1,4 +1,6 @@
 ﻿using System;
+using System.IO;
+using System.Media;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -19,6 +21,7 @@ namespace TwentyTwentyTwenty
 
     public class MyCustomApplicationContext : ApplicationContext
     {
+        private const string SoundPath = @"C:\Windows\Media\Windows Proximity Notification.wav";
         private static readonly TimeSpan HideTime = TimeSpan.FromMinutes(20);
         private static readonly TimeSpan ShowTime = TimeSpan.FromSeconds(20);
 
@@ -35,6 +38,9 @@ namespace TwentyTwentyTwenty
                 Visible = true
             };
 
+            var soundPlayer = File.Exists(SoundPath)
+                ? new SoundPlayer(SoundPath)
+                : null;
             var uiThreadSyncContext = SynchronizationContext.Current;
 
             Task.Run(() =>
@@ -45,6 +51,7 @@ namespace TwentyTwentyTwenty
                     uiThreadSyncContext.Post(state => form.Visible = true, null);
                     Thread.Sleep(ShowTime);
                     uiThreadSyncContext.Post(state => form.Visible = false, null);
+                    soundPlayer?.Play();
                 }
                 // ReSharper disable once FunctionNeverReturns
             });
