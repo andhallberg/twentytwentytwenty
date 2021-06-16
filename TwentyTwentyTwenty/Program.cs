@@ -30,6 +30,7 @@ namespace TwentyTwentyTwenty
             trayIcon = new NotifyIcon
             {
                 Icon = Resources.AppIcon,
+                Text = "Twenty x 3",
                 ContextMenu = new ContextMenu(new[] { new MenuItem("Exit", Exit) }),
                 Visible = true
             };
