@@ -88,7 +88,7 @@ namespace TwentyTwentyTwenty
         {
             if (soundPlayer == null)
             {
-                // only listen care about lock screen if we're playing audio
+                // only listen about lock screen if we're playing audio
                 return;
             }
             SystemEvents.SessionSwitch += SystemEvents_SessionSwitch;
