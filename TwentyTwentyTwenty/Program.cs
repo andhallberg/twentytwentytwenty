@@ -1,4 +1,5 @@
-﻿using System;
+using Microsoft.Win32;
+using System;
 using System.IO;
 using System.Media;
 using System.Threading;
@@ -27,6 +28,7 @@ namespace TwentyTwentyTwenty
 
         private readonly NotifyIcon trayIcon;
         private readonly Form1 form = new Form1();
+        private bool _isScreenUnlocked = true;
 
         public MyCustomApplicationContext()
         {
@@ -39,6 +41,7 @@ namespace TwentyTwentyTwenty
             };
 
             SoundPlayer soundPlayer = InitAudioPlayer();
+            InitLockScreenAwareness(soundPlayer);
 
             var uiThreadSyncContext = SynchronizationContext.Current;
 
@@ -50,7 +53,8 @@ namespace TwentyTwentyTwenty
                     uiThreadSyncContext.Post(state => form.Visible = true, null);
                     Thread.Sleep(ShowTime);
                     uiThreadSyncContext.Post(state => form.Visible = false, null);
-                    soundPlayer?.Play();
+
+                    PlayAudio(soundPlayer);
                 }
                 // ReSharper disable once FunctionNeverReturns
             });
@@ -78,6 +82,32 @@ namespace TwentyTwentyTwenty
                 soundPlayer = null;
                 trayIcon.Text += $"\n{error}";
             }
+        }
+
+        private void InitLockScreenAwareness(SoundPlayer soundPlayer)
+        {
+            if (soundPlayer == null)
+            {
+                // only listen about lock screen if we're playing audio
+                return;
+            }
+            SystemEvents.SessionSwitch += SystemEvents_SessionSwitch;
+        }
+
+        private void PlayAudio(SoundPlayer soundPlayer)
+        {
+            if (!_isScreenUnlocked)
+            {
+                return;
+            }
+
+            soundPlayer?.Play();
+        }
+
+        private void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
+        {
+            // deliberately set to false on all other states
+            _isScreenUnlocked = e.Reason == SessionSwitchReason.SessionUnlock;
         }
 
         private void Exit(object sender, EventArgs e)
