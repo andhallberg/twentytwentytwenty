@@ -25,9 +25,18 @@ namespace TwentyTwentyTwenty
         private static readonly TimeSpan HideTime = TimeSpan.FromMinutes(20);
         private static readonly TimeSpan ShowTime = TimeSpan.FromSeconds(20);
 
+        // 0 means not suspended, long.MaxValue means suspended indefinitely
+        private const long NotSuspended = 0;
+        private const long SuspendedIndefinitely = long.MaxValue;
+
         private readonly NotifyIcon trayIcon;
         private readonly Form1 form = new Form1();
         private bool _isScreenUnlocked = true;
+
+        // UTC ticks at which the suspension ends, written from the UI thread and read from the timer thread
+        private long _suspendedUntilTicks = NotSuspended;
+
+        private ToolStripMenuItem unsuspendMenuItem;
 
         public MyCustomApplicationContext()
         {
@@ -49,6 +58,12 @@ namespace TwentyTwentyTwenty
                 while (true)
                 {
                     Thread.Sleep(HideTime);
+
+                    if (IsSuspended())
+                    {
+                        continue;
+                    }
+
                     uiThreadSyncContext.Post(state => form.Visible = true, null);
                     Thread.Sleep(ShowTime);
                     uiThreadSyncContext.Post(state => form.Visible = false, null);
@@ -61,9 +76,53 @@ namespace TwentyTwentyTwenty
 
         private ContextMenuStrip CreateTrayMenu()
         {
+            var suspendMenuItem = new ToolStripMenuItem("Suspend for...");
+            suspendMenuItem.DropDownItems.Add(CreateSuspendPreset("20 minutes", TimeSpan.FromMinutes(20)));
+            suspendMenuItem.DropDownItems.Add(CreateSuspendPreset("30 minutes", TimeSpan.FromMinutes(30)));
+            suspendMenuItem.DropDownItems.Add(CreateSuspendPreset("1 hour", TimeSpan.FromHours(1)));
+            suspendMenuItem.DropDownItems.Add(new ToolStripMenuItem("Indefinitely", null, (_, _) => Suspend(null)));
+
+            unsuspendMenuItem = new ToolStripMenuItem("Unsuspend", null, (_, _) => Unsuspend())
+            {
+                Enabled = false
+            };
+
             var menu = new ContextMenuStrip();
+            menu.Items.Add(suspendMenuItem);
+            menu.Items.Add(unsuspendMenuItem);
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Exit", null, Exit));
+
+            // the suspension can expire on its own, so refresh the state every time the menu is shown
+            menu.Opening += (_, _) => unsuspendMenuItem.Enabled = IsSuspended();
+
             return menu;
+
+            ToolStripMenuItem CreateSuspendPreset(string text, TimeSpan duration) =>
+                new ToolStripMenuItem(text, null, (_, _) => Suspend(duration));
+        }
+
+        /// <param name="duration">null suspends indefinitely</param>
+        private void Suspend(TimeSpan? duration)
+        {
+            var until = duration.HasValue
+                ? (DateTime.UtcNow + duration.Value).Ticks
+                : SuspendedIndefinitely;
+
+            Interlocked.Exchange(ref _suspendedUntilTicks, until);
+            unsuspendMenuItem.Enabled = true;
+        }
+
+        private void Unsuspend()
+        {
+            Interlocked.Exchange(ref _suspendedUntilTicks, NotSuspended);
+            unsuspendMenuItem.Enabled = false;
+        }
+
+        private bool IsSuspended()
+        {
+            var until = Interlocked.Read(ref _suspendedUntilTicks);
+            return until == SuspendedIndefinitely || until > DateTime.UtcNow.Ticks;
         }
 
         SoundPlayer InitAudioPlayer()
