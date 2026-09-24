@@ -14,8 +14,7 @@ namespace TwentyTwentyTwenty
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            ApplicationConfiguration.Initialize();
             Application.Run(new MyCustomApplicationContext());
         }
     }
@@ -36,7 +35,7 @@ namespace TwentyTwentyTwenty
             {
                 Icon = Resources.AppIcon,
                 Text = "Twenty x 3",
-                ContextMenu = new ContextMenu(new[] { new MenuItem("Exit", Exit) }),
+                ContextMenuStrip = CreateTrayMenu(),
                 Visible = true
             };
 
@@ -58,6 +57,13 @@ namespace TwentyTwentyTwenty
                 }
                 // ReSharper disable once FunctionNeverReturns
             });
+        }
+
+        private ContextMenuStrip CreateTrayMenu()
+        {
+            var menu = new ContextMenuStrip();
+            menu.Items.Add(new ToolStripMenuItem("Exit", null, Exit));
+            return menu;
         }
 
         SoundPlayer InitAudioPlayer()
