@@ -31,10 +31,15 @@ namespace TwentyTwentyTwenty
 
         private readonly NotifyIcon trayIcon;
         private readonly Form1 form = new Form1();
+        private readonly SoundPlayer soundPlayer;
+        private readonly SynchronizationContext uiThreadSyncContext;
         private bool _isScreenUnlocked = true;
 
         // UTC ticks at which the suspension ends, written from the UI thread and read from the timer thread
         private long _suspendedUntilTicks = NotSuspended;
+
+        // 1 while a reminder is on screen, so a manual one cannot stack on top of a scheduled one
+        private int _isShowingReminder;
 
         private ToolStripMenuItem unsuspendMenuItem;
 
@@ -48,10 +53,10 @@ namespace TwentyTwentyTwenty
                 Visible = true
             };
 
-            SoundPlayer soundPlayer = InitAudioPlayer();
+            soundPlayer = InitAudioPlayer();
             InitLockScreenAwareness(soundPlayer);
 
-            var uiThreadSyncContext = SynchronizationContext.Current;
+            uiThreadSyncContext = SynchronizationContext.Current;
 
             Task.Run(() =>
             {
@@ -64,11 +69,7 @@ namespace TwentyTwentyTwenty
                         continue;
                     }
 
-                    uiThreadSyncContext.Post(state => form.Visible = true, null);
-                    Thread.Sleep(ShowTime);
-                    uiThreadSyncContext.Post(state => form.Visible = false, null);
-
-                    PlayAudio(soundPlayer);
+                    ShowReminder();
                 }
                 // ReSharper disable once FunctionNeverReturns
             });
@@ -88,6 +89,8 @@ namespace TwentyTwentyTwenty
             };
 
             var menu = new ContextMenuStrip();
+            menu.Items.Add(new ToolStripMenuItem("Show now", null, (_, _) => Task.Run(ShowReminder)));
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(suspendMenuItem);
             menu.Items.Add(unsuspendMenuItem);
             menu.Items.Add(new ToolStripSeparator());
@@ -100,6 +103,32 @@ namespace TwentyTwentyTwenty
 
             ToolStripMenuItem CreateSuspendPreset(string text, TimeSpan duration) =>
                 new ToolStripMenuItem(text, null, (_, _) => Suspend(duration));
+        }
+
+        /// <summary>
+        /// Shows the reminder for <see cref="ShowTime"/> and then plays the sound.
+        /// Must not be called on the UI thread, it blocks while the reminder is up.
+        /// </summary>
+        private void ShowReminder()
+        {
+            if (Interlocked.Exchange(ref _isShowingReminder, 1) == 1)
+            {
+                // already on screen, nothing to do
+                return;
+            }
+
+            try
+            {
+                uiThreadSyncContext.Post(state => form.Visible = true, null);
+                Thread.Sleep(ShowTime);
+                uiThreadSyncContext.Post(state => form.Visible = false, null);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isShowingReminder, 0);
+            }
+
+            PlayAudio();
         }
 
         /// <param name="duration">null suspends indefinitely</param>
@@ -159,7 +188,7 @@ namespace TwentyTwentyTwenty
             SystemEvents.SessionSwitch += SystemEvents_SessionSwitch;
         }
 
-        private void PlayAudio(SoundPlayer soundPlayer)
+        private void PlayAudio()
         {
             if (!_isScreenUnlocked)
             {
