@@ -41,6 +41,9 @@ namespace TwentyTwentyTwenty
         // 1 while a reminder is on screen, so a manual one cannot stack on top of a scheduled one
         private int _isShowingReminder;
 
+        // signalled when the user dismisses the reminder by clicking it
+        private readonly ManualResetEventSlim reminderDismissed = new ManualResetEventSlim();
+
         private ToolStripMenuItem unsuspendMenuItem;
 
         public MyCustomApplicationContext()
@@ -57,6 +60,15 @@ namespace TwentyTwentyTwenty
             InitLockScreenAwareness(soundPlayer);
 
             uiThreadSyncContext = SynchronizationContext.Current;
+
+            // the form hides itself when clicked, which is how we notice a manual dismissal
+            form.VisibleChanged += (_, _) =>
+            {
+                if (!form.Visible)
+                {
+                    reminderDismissed.Set();
+                }
+            };
 
             Task.Run(() =>
             {
@@ -106,7 +118,8 @@ namespace TwentyTwentyTwenty
         }
 
         /// <summary>
-        /// Shows the reminder for <see cref="ShowTime"/> and then plays the sound.
+        /// Shows the reminder for <see cref="ShowTime"/> and then plays the sound. Clicking the
+        /// reminder dismisses it early and skips the sound.
         /// Must not be called on the UI thread, it blocks while the reminder is up.
         /// </summary>
         private void ShowReminder()
@@ -117,15 +130,23 @@ namespace TwentyTwentyTwenty
                 return;
             }
 
+            bool dismissedByUser;
             try
             {
+                reminderDismissed.Reset();
                 uiThreadSyncContext.Post(state => form.Visible = true, null);
-                Thread.Sleep(ShowTime);
+                dismissedByUser = reminderDismissed.Wait(ShowTime);
                 uiThreadSyncContext.Post(state => form.Visible = false, null);
             }
             finally
             {
                 Interlocked.Exchange(ref _isShowingReminder, 0);
+            }
+
+            if (dismissedByUser)
+            {
+                // the user already looked away on their own, no need to nag
+                return;
             }
 
             PlayAudio();
